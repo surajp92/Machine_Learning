@@ -32,44 +32,26 @@ target = target
 
 # normalization
 scaler = MinMaxScaler(feature_range=(0, 1))
-data = scaler.fit_transform(data)
-target = scaler.fit_transform(target)
+#data = scaler.fit_transform(data)
+#target = scaler.fit_transform(target)
 
 
 # data for training
 
-data_train = data[1:100].reshape(99,1,2)
+# data_train = data[1:100].reshape(99,1,2)
 # target_train = target.reshape(99,1,2)
-target_train = target
-# target_train = np.transpose(target)
-
-# build model
-#model.add(LSTM(2, input_shape=(1, 2), return_sequences=True, activation='relu'))
-#model.add(LSTM(2, input_shape=(1, 2), return_sequences=True, activation='relu'))
-#model.add(LSTM(2, input_shape=(1, 2), return_sequences=True, activation='relu'))
-#model.add(LSTM(2, input_shape=(1, 2), return_sequences=True, activation='relu'))
-#model.add(LSTM(2, input_shape=(1, 2), return_sequences=True, activation='relu'))
-#model.add(LSTM(2, input_shape=(1, 2), return_sequences=True, activation='relu'))
-
-#model.add(LSTM(4, input_shape=(1,2), return_sequences=True, activation='tanh'))
-#model.add(LSTM(4, input_shape=(1,2), return_sequences=True, activation='tanh'))
-#model.add(Dense(2))
+data_train = data[1:100].reshape(99,1,2)
+target_train = target #.reshape(1,99,2)
 
 model = Sequential()
 model.add(LSTM(4, input_shape=(1, 2), activation='tanh'))
-# model.add(LSTM(2, input_shape=(1, 2), return_sequences=True, activation='tanh'))
-# model.add(LSTM(2, input_shape=(1, 2), activation='tanh'))
-#model.add(LSTM(8, input_shape=(1, 2), return_sequences=True, activation='sigmoid'))
-#model.add(LSTM(8, input_shape=(1, 2), activation='sigmoid'))
 model.add(Dense(2))
-#model.compile(loss='mean_squared_error', optimizer='adam')
-# model.fit(trainX, trainY, epochs=100, batch_size=1, verbose=2)
 
 # compile the model
 model.compile(loss='mse', optimizer='adam', metrics=['accuracy'])
 
 # run the model
-history = model.fit(data_train, target_train, nb_epoch=500, batch_size=10, validation_split=0.2)
+history = model.fit(data_train, target_train, nb_epoch=10000, batch_size=10, validation_split=0.2)
 
 # plotting results
 import matplotlib.pyplot as plt
@@ -90,18 +72,18 @@ plt.show()
 
 # deployment
 
-test = [1.0, 0.5]
+test = [2.0, 0.0]
 test = np.array(test)
 test = test.reshape(1,1,2)
 
-temp = [1.0, 0.5]
+temp = [2.0, 0.0]
 temp= np.array(temp)
 temp = temp.reshape(1,2)
 # temp = scaler.inverse_transform(temp)
 
 for i in range(1,nt):
     slope = model.predict(test)
-    slope = scaler.inverse_transform(slope)
+    # slope = scaler.inverse_transform(slope)
     a = temp[i-1,0] + slope[i-1,0]*dt
     b = temp[i-1,1] + slope[i-1,1]*dt
     c = [a,b]
@@ -137,7 +119,7 @@ true_y2 = [0.0 for i in range(nt)]
 true_y1= np.array(true_y1, dtype=np.float64)
 true_y2= np.array(true_y2, dtype=np.float64)
 
-true_y1[0] = 1.0
+true_y1[0] = 2.0
 true_y2[0] = 0.0
 
 for i in range(1,nt):
@@ -168,6 +150,10 @@ plt.show()
 #predictData = model.predict(data_train)
 ## predictData  = scaler.inverse_transform(predictData )
 #
+"""
+this is for checking if we give the whole data from t = 0 to T for different
+frequency, what result we get. 
+"""
 omega2 = 3.0*2.0*np.pi
 
 data2 = [[np.cos(omega2*dt*i), -omega2*np.sin(omega2*dt*i)] for i in range(nt)]
@@ -212,37 +198,3 @@ plt.legend()
 plt.show()
 
 del model
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
