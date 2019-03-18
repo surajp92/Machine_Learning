@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Sat Mar 16 13:38:12 2019
+Created on Sun Mar 17 15:19:23 2019
 
-@author: Suraj Pawar
+@author: user1
 """
 # import packages
 import numpy as np
@@ -55,17 +55,23 @@ plt.legend(loc='best')
 plt.show()
 
 # calculate slope
-yout = [(y[i]-y[i-1])/dt for i in range(1,len(y))]
-yout.insert(0, [0, 0, 0]) # slope at time t = 0
+yout = [y[i+1] for i in range(len(y)-1)]
+yout.insert(len(y)-1, y[len(y)-1]) # solution at y(tn) = y(t_n-1)
 yout = np.array(yout)
 
 # training data always contatins ode data with initial condition [1,0.1,0] as calculated above
-xtrain = y
+# temporaty traininig data
+xt = y
 # for LSTM the input has to be 3-dimensional array with the dimension [samples, time. features]
 # https://machinelearningmastery.com/reshape-input-data-long-short-term-memory-networks-keras/?unapproved=474658&moderation-hash=87553a7d66026ce022753be31629fd1c#comment-474658
 # output shape is often [samples, features]
-# xtrain = xtrain.reshape(nt_steps,1,3)
+# xtrain = xtrain.reshape(nt_steps-1,1,3)
 ytrain = yout
+
+# data for two leg [y(n-1), y(n)]
+xtrain = [[xt[i-1,0], xt[i-1,1], xt[i-1,2], xt[i,0], xt[i,1], xt[i,2]] for i in range(1,xt.shape[0])]
+xtrain.insert(0, [0, 0, 0, xt[0,0], xt[0,1], xt[0,2]])
+xtrain = np.array(xtrain)    
 
 # additional data for training with random initial condition
 for i in range(nsamples):
@@ -75,12 +81,16 @@ for i in range(nsamples):
     # solve ode
     y = odeint(odemodel, y0, t)
     # calculate slope
-    yout = [(y[j]-y[j-1])/dt for j in range(1,len(y))]
-    yout.insert(0, [0, 0, 0]) # slope at time t = 0
+    yout = [y[j+1] for j in range(len(y)-1)]
+    yout.insert(len(y)-1, y[len(y)-1]) # solution at y(tn) = y(t_n-1)
     yout = np.array(yout)
     # reshape input and add in the previous input train data
     # y = y.reshape(nt_steps,1,3)
-    xtrain = np.vstack((xtrain, y))
+    xtemp = [[y[i-1,0], y[i-1,1], y[i-1,2], y[i,0], y[i,1], y[i,2]] for i in range(1,y.shape[0])]
+    xtemp.insert(0, [0, 0, 0, y[0,0], y[0,1], y[0,2]])
+    xtemp = np.array(xtemp)
+    # add xt = [y(n-1), y(n)] to x_train    
+    xtrain = np.vstack((xtrain, xtemp))
     ytrain = np.vstack((ytrain, yout))
 
 # randomly sample data
@@ -89,21 +99,21 @@ indices = np.random.randint(0,xtrain.shape[0],rsamples)
 xtrain = xtrain[indices]
 ytrain = ytrain[indices]
 
-xtrain = xtrain.reshape(rsamples,1,3)
-    
+xtrain = xtrain.reshape(rsamples,1,6)
+
 # create the LSTM model
 model = Sequential()
 #model.add(LSTM(3, input_shape=(1, 3), return_sequences=True, activation='tanh'))
-#model.add(LSTM(6, input_shape=(1, 3), return_sequences=True, activation='tanh'))
-model.add(LSTM(12, input_shape=(1, 3), return_sequences=True, activation='tanh'))
-model.add(LSTM(12, input_shape=(1, 3), activation='tanh'))
+#model.add(LSTM(120, input_shape=(1, 6), return_sequences=True, activation='tanh'))
+model.add(LSTM(120, input_shape=(1, 6), return_sequences=True, activation='relu'))
+model.add(LSTM(120, input_shape=(1, 6), activation='relu'))
 model.add(Dense(3))
 
 # compile the model
 model.compile(loss='mse', optimizer='adam', metrics=['accuracy'])
 
 # run the model
-history = model.fit(xtrain, ytrain, nb_epoch=600, batch_size=200, validation_split=0.3)
+history = model.fit(xtrain, ytrain, nb_epoch=800, batch_size=200, validation_split=0.3)
 
 # training and validation loss. Plot loss
 loss = history.history['loss']
@@ -119,9 +129,9 @@ plt.legend()
 plt.show()
 
 # create input at t= 0 for the model testing
-ytest = [1.0, -0.1, 0.0]
+ytest = [0.0, 0.0, 0.0, 1.0, -0.1, 0.0]
 ytest = np.array(ytest)
-ytest = ytest.reshape(1,1,3)
+ytest = ytest.reshape(1,1,6)
 
 # create an array to store ml predicted y
 ytest_ml = [1.0, -0.1, 0.0]
@@ -130,14 +140,16 @@ ytest_ml = ytest_ml.reshape(1,3)
 
 for i in range(1,nt_steps):
     slope_ml = model.predict(ytest) # slope from LSTM/ ML model
-    a = ytest_ml[i-1,0] + slope_ml[i-1,0]*dt # y1 at next time step
-    b = ytest_ml[i-1,1] + slope_ml[i-1,1]*dt # y2 at next time step
-    c = ytest_ml[i-1,2] + slope_ml[i-1,2]*dt # y3 at next time step
+    a = slope_ml[i-1,0] # y1 at next time step
+    b = slope_ml[i-1,1] # y2 at next time step
+    c = slope_ml[i-1,2] # y3 at next time step
     d = [a,b,c] # [y1, y2, y3] at (n+1)th step
     d = np.array(d)
     ytest_ml = np.vstack((ytest_ml, d))
-    d = d.reshape(1,1,3) # create 3D array to be added in test data
-    ytest = np.vstack((ytest, d)) # add [y1, y2, y3] at (n+1) to input test for next slope prediction
+    ee = [ytest[i-1,0,3], ytest[i-1,0,4], ytest[i-1,0,5], a, b, c]
+    ee = np.array(ee)
+    ee = ee.reshape(1,1,6) # create 3D array to be added in test data
+    ytest = np.vstack((ytest, ee)) # add [y1, y2, y3] at (n+1) to input test for next slope prediction
 
 # initial condition
 y0test = [1, -0.1, 0]
