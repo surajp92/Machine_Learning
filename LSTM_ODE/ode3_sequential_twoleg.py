@@ -55,8 +55,8 @@ plt.legend(loc='best')
 plt.show()
 
 # calculate slope
-yout = [y[i+1] for i in range(len(y)-1)]
-yout.insert(len(y)-1, y[len(y)-1]) # solution at y(tn) = y(t_n-1)
+yout = [y[i+2] for i in range(len(y)-2)]
+# yout.insert(len(y)-1, y[len(y)-1]) # solution at y(tn) = y(t_n-1)
 yout = np.array(yout)
 
 # training data always contatins ode data with initial condition [1,0.1,0] as calculated above
@@ -69,8 +69,8 @@ xt = y
 ytrain = yout
 
 # data for two leg [y(n-1), y(n)]
-xtrain = [[xt[i-1,0], xt[i-1,1], xt[i-1,2], xt[i,0], xt[i,1], xt[i,2]] for i in range(1,xt.shape[0])]
-xtrain.insert(0, [0, 0, 0, xt[0,0], xt[0,1], xt[0,2]])
+xtrain = [[xt[i-2,0], xt[i-2,1], xt[i-2,2], xt[i-1,0], xt[i-1,1], xt[i-1,2]] for i in range(2,xt.shape[0])]
+# xtrain.insert(0, [0, 0, 0, xt[0,0], xt[0,1], xt[0,2]])
 xtrain = np.array(xtrain)    
 
 # additional data for training with random initial condition
@@ -81,13 +81,13 @@ for i in range(nsamples):
     # solve ode
     y = odeint(odemodel, y0, t)
     # calculate slope
-    yout = [y[j+1] for j in range(len(y)-1)]
-    yout.insert(len(y)-1, y[len(y)-1]) # solution at y(tn) = y(t_n-1)
+    yout = [y[j+2] for j in range(len(y)-2)]
+    # yout.insert(len(y)-1, y[len(y)-1]) # solution at y(tn) = y(t_n-1)
     yout = np.array(yout)
     # reshape input and add in the previous input train data
     # y = y.reshape(nt_steps,1,3)
-    xtemp = [[y[i-1,0], y[i-1,1], y[i-1,2], y[i,0], y[i,1], y[i,2]] for i in range(1,y.shape[0])]
-    xtemp.insert(0, [0, 0, 0, y[0,0], y[0,1], y[0,2]])
+    xtemp = [[y[i-2,0], y[i-2,1], y[i-2,2], y[i-1,0], y[i-1,1], y[i-1,2]] for i in range(2,y.shape[0])]
+    # xtemp.insert(0, [0, 0, 0, y[0,0], y[0,1], y[0,2]])
     xtemp = np.array(xtemp)
     # add xt = [y(n-1), y(n)] to x_train    
     xtrain = np.vstack((xtrain, xtemp))
@@ -105,8 +105,8 @@ xtrain = xtrain.reshape(rsamples,1,6)
 model = Sequential()
 #model.add(LSTM(3, input_shape=(1, 3), return_sequences=True, activation='tanh'))
 #model.add(LSTM(120, input_shape=(1, 6), return_sequences=True, activation='tanh'))
-model.add(LSTM(120, input_shape=(1, 6), return_sequences=True, activation='relu'))
-model.add(LSTM(120, input_shape=(1, 6), activation='relu'))
+#model.add(LSTM(120, input_shape=(1, 6), return_sequences=True, activation='tanh'))
+model.add(LSTM(120, input_shape=(1, 6), activation='tanh'))
 model.add(Dense(3))
 
 # compile the model
@@ -128,34 +128,36 @@ plt.title('Training and validation loss')
 plt.legend()
 plt.show()
 
-# create input at t= 0 for the model testing
-ytest = [0.0, 0.0, 0.0, 1.0, -0.1, 0.0]
-ytest = np.array(ytest)
-ytest = ytest.reshape(1,1,6)
-
-# create an array to store ml predicted y
-ytest_ml = [1.0, -0.1, 0.0]
-ytest_ml= np.array(ytest_ml)
-ytest_ml = ytest_ml.reshape(1,3)
-
-for i in range(1,nt_steps):
-    slope_ml = model.predict(ytest) # slope from LSTM/ ML model
-    a = slope_ml[i-1,0] # y1 at next time step
-    b = slope_ml[i-1,1] # y2 at next time step
-    c = slope_ml[i-1,2] # y3 at next time step
-    d = [a,b,c] # [y1, y2, y3] at (n+1)th step
-    d = np.array(d)
-    ytest_ml = np.vstack((ytest_ml, d))
-    ee = [ytest[i-1,0,3], ytest[i-1,0,4], ytest[i-1,0,5], a, b, c]
-    ee = np.array(ee)
-    ee = ee.reshape(1,1,6) # create 3D array to be added in test data
-    ytest = np.vstack((ytest, ee)) # add [y1, y2, y3] at (n+1) to input test for next slope prediction
-
 # initial condition
 y0test = [1, -0.1, 0]
 
 # solve ODE
 ytode = odeint(odemodel,y0test,t)
+
+# create input at t= 0 for the model testing
+ytest = [ytode[0], ytode[1]]
+ytest = np.array(ytest)
+ytest = ytest.reshape(1,1,6)
+
+# create an array to store ml predicted y
+ytest_ml = np.zeros((nt_steps,3))
+# ytest_ml = ode solution for first four time steps
+ytest_ml[0] = ytode[0]
+ytest_ml[1] = ytode[1]
+
+for i in range(2,nt_steps):
+    slope_ml = model.predict(ytest) # slope from LSTM/ ML model
+    a = slope_ml[i-2,0] # y1 at next time step
+    b = slope_ml[i-2,1] # y2 at next time step
+    c = slope_ml[i-2,2] # y3 at next time step
+    d = [a,b,c] # [y1, y2, y3] at (n+1)th step
+    d = np.array(d)
+    ytest_ml[i] = d
+    ee = [ytest[i-2,0,3], ytest[i-2,0,4], ytest[i-2,0,5], a, b, c]
+    ee = np.array(ee)
+    ee = ee.reshape(1,1,6) # create 3D array to be added in test data
+    ytest = np.vstack((ytest, ee)) # add [y1, y2, y3] at (n+1) to input test for next slope prediction
+
 
 plt.figure()    
 plt.plot(t, ytest_ml[:,0], 'c-', label=r'$y_1 ML$') 
