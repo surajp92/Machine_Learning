@@ -35,7 +35,7 @@ t_final = 10.0 # Final time
 nt_steps = 200 # Number of time steps
 t = np.linspace(0,t_final, num=nt_steps)
 dt = (t_final - t_init)/nt_steps
-nsamples = 250
+nsamples = 20
 rsamples = 1000
 
 # initial condition
@@ -77,7 +77,8 @@ for i in range(3,len(y)-1):
 # additional data for training with random initial condition
 for i in range(nsamples):
     # initial condition
-    y2s = 0.1*uniform(-1,1)
+    # y2s = 0.1*uniform(-1,1)
+    y2s = 0.1*(0.1*i-1.0)
     y0 = [1.0, y2s, 0.0]
     # solve ode
     y = odeint(odemodel, y0, t)
@@ -100,17 +101,17 @@ for i in range(nsamples):
 # randomly sample data
 indices = np.random.randint(0,xtrain.shape[0],rsamples)
 
-xtrain = xtrain[indices]
-ytrain = ytrain[indices]
+#xtrain = xtrain[indices]
+#ytrain = ytrain[indices]
 
-xtrain = xtrain.reshape(rsamples,1,12)
-
+#xtrain = xtrain.reshape(rsamples,1,12)
+xtrain = xtrain.reshape((nsamples+1)*(nt_steps-4),1,12)
 # create the LSTM model
 model = Sequential()
 #model.add(LSTM(3, input_shape=(1, 3), return_sequences=True, activation='tanh'))
 #model.add(LSTM(120, input_shape=(1, 12), return_sequences=True, activation='tanh'))
 #model.add(LSTM(120, input_shape=(1, 12), return_sequences=True, activation='tanh'))
-model.add(LSTM(480, input_shape=(1, 12), activation='tanh'))
+model.add(LSTM(120, input_shape=(1, 12), activation='tanh'))
 model.add(Dense(3))
 
 # compile the model
@@ -132,12 +133,13 @@ plt.title('Training and validation loss')
 plt.legend()
 plt.show()
 
-nsamples = 100
+nsamples = 1
 rmshist = np.zeros((nsamples,3))
 y20hist = np.zeros(nsamples)
 for k in range(nsamples):
     # initial condition
-    y2s = 0.1*uniform(-1,1)
+    #y2s = 0.1*uniform(-1,1)
+    y2s = -0.1*(-0.25)
     y20hist[k] = y2s
     # initial condition
     y0test = [1, y2s, 0]
@@ -173,19 +175,20 @@ for k in range(nsamples):
         ee = ee.reshape(1,1,12)
         ytest = np.vstack((ytest, ee)) # add [y1, y2, y3] at (n+1) to input test for next slope prediction
     
-#    plt.figure()    
-#    plt.plot(t, ytest_ml[:,0], 'c-', label=r'$y_1 ML$') 
-#    plt.plot(t, ytest_ml[:,1], 'm-', label=r'$y_2 ML$') 
-#    plt.plot(t, ytest_ml[:,2], 'y-', label=r'$y_3 ML$') 
-#    
-#    plt.plot(t, ytode[:,0], 'r-', label=r'$y_1$') 
-#    plt.plot(t, ytode[:,1], 'g-', label=r'$y_2$') 
-#    plt.plot(t, ytode[:,2], 'b-', label=r'$y_3$') 
-#    
-#    plt.ylabel('response ML')
-#    plt.xlabel('time ML')
-#    plt.legend(loc='best')
-#    plt.show()
+    plt.figure()    
+    plt.plot(t, ytest_ml[:,0], 'c-', label=r'$y_1 ML$') 
+    plt.plot(t, ytest_ml[:,1], 'm-', label=r'$y_2 ML$') 
+    plt.plot(t, ytest_ml[:,2], 'y-', label=r'$y_3 ML$') 
+    
+    plt.plot(t, ytode[:,0], 'r-', label=r'$y_1$') 
+    plt.plot(t, ytode[:,1], 'g-', label=r'$y_2$') 
+    plt.plot(t, ytode[:,2], 'b-', label=r'$y_3$') 
+    
+    plt.ylabel('response ML')
+    plt.xlabel('time ML')
+    plt.legend(loc='best')
+    # plt.savefig('ode_seq_fourleg_x=0.25.png', dpi = 1000)
+    plt.show()
     
     # calculation of mean square error
     residual = np.zeros((nsamples,3))
@@ -202,12 +205,12 @@ y20hist = y20hist.reshape(nsamples,1)
 errorhist =  np.concatenate((y20hist,rmshist), axis = 1)
 errorhist = errorhist[errorhist[:,0].argsort()]
 
-plt.figure()    
-plt.plot(errorhist[:,0], errorhist[:,1], 'r-', label='Y1 Error') 
-plt.plot(errorhist[:,0], errorhist[:,2], 'g-', label='Y2 Error') 
-plt.plot(errorhist[:,0], errorhist[:,3], 'b-', label='Y3 Error') 
-
-plt.ylabel('Mean square error')
-plt.xlabel('x')
-plt.legend(loc='best')
-plt.show()
+#plt.figure()    
+#plt.plot(errorhist[:,0], errorhist[:,1], 'r-', label='Y1 Error') 
+#plt.plot(errorhist[:,0], errorhist[:,2], 'g-', label='Y2 Error') 
+#plt.plot(errorhist[:,0], errorhist[:,3], 'b-', label='Y3 Error') 
+#
+#plt.ylabel('Mean square error')
+#plt.xlabel('x')
+#plt.legend(loc='best')
+#plt.show()

@@ -46,7 +46,7 @@ t_final = 10.0 # Final time
 nt_steps = 200 # Number of time steps
 t = np.linspace(0,t_final, num=nt_steps)
 dt = (t_final - t_init)/nt_steps
-nsamples = 250
+nsamples = 20
 rsamples = 1000
 
 # initial condition
@@ -83,7 +83,8 @@ frandom = np.zeros((nsamples,3))
 # additional data for training with random initial condition
 for i in range(nsamples):
     # initial condition
-    y2s = 0.1*uniform(-1,1)
+    # y2s = 0.1*uniform(-1,1)
+    y2s = 0.1*(0.1*i-1.0)
     frandom[i,0] = y2s
     y0 = [1.0, y2s, 0.0]
     # solve ode
@@ -104,8 +105,8 @@ frandom = frandom[frandom[:,0].argsort()]
 # randomly sample data
 indices = np.random.randint(0,xtrain.shape[0],rsamples)
 
-xtrain = xtrain[indices]
-ytrain = ytrain[indices]
+#xtrain = xtrain[indices]
+#ytrain = ytrain[indices]
 
 #xtrain = xtrain.reshape(rsamples,1,3)
 
@@ -153,7 +154,8 @@ rmshist = np.zeros((nsamples,3))
 y20hist = np.zeros(nsamples)
 for k in range(nsamples):
     # initial condition
-    y2s = 0.1*uniform(-1,1)
+    #y2s = 0.1*uniform(-1,1)
+    y2s = -0.1*(-0.25)
     y20hist[k] = y2s
     # initial condition
     y0test = [1, y2s, 0]
@@ -197,6 +199,7 @@ for k in range(nsamples):
     plt.ylabel('response ML')
     plt.xlabel('time ML')
     plt.legend(loc='best')
+    plt.savefig('ode_euler_twoleg_x=-0.25.png', dpi = 1000)
     plt.show()
     
     # calculation of mean square error

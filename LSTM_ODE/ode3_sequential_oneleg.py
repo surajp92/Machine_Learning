@@ -1,14 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Sun Mar 17 15:19:23 2019
-
-@author: user1
-"""
-
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
 Created on Sat Mar 16 13:38:12 2019
 
 @author: Suraj Pawar
@@ -44,7 +36,8 @@ t_final = 10.0 # Final time
 nt_steps = 200 # Number of time steps
 t = np.linspace(0,t_final, num=nt_steps)
 dt = (t_final - t_init)/nt_steps
-nsamples = 250
+# nsamples = 250
+nsamples = 20
 rsamples = 1000
 
 # initial condition
@@ -81,7 +74,8 @@ frandom = np.zeros((nsamples,3))
 # additional data for training with random initial condition
 for i in range(nsamples):
     # initial condition
-    y2s = 0.1*uniform(-1,1)
+    # y2s = 0.1*uniform(-1,1)
+    y2s = 0.1*(0.1*i-1.0)
     frandom[i,0] = y2s
     y0 = [1.0, y2s, 0.0]
     # solve ode
@@ -103,10 +97,11 @@ frandom = frandom[frandom[:,0].argsort()]
 # randomly sample data
 indices = np.random.randint(0,xtrain.shape[0],rsamples)
 
-xtrain = xtrain[indices]
-ytrain = ytrain[indices]
+#xtrain = xtrain[indices]
+#ytrain = ytrain[indices]
 
-xtrain = xtrain.reshape(rsamples,1,3)
+#xtrain = xtrain.reshape(rsamples,1,3)
+xtrain = xtrain.reshape((nsamples+1)*(nt_steps-1),1,3)
 
 # create the LSTM model
 model = Sequential()
@@ -135,11 +130,13 @@ plt.title('Training and validation loss')
 plt.legend()
 plt.show()
 
+nsamples = 1
 rmshist = np.zeros((nsamples,3))
 y20hist = np.zeros(nsamples)
 for k in range(nsamples):
     # initial condition
-    y2s = 0.1*uniform(-1,1)
+    #y2s = 0.1*uniform(-1,1)
+    y2s = -0.1*0.25
     y20hist[k] = y2s
     # initial condition
     y0test = [1, y2s, 0]
@@ -168,19 +165,20 @@ for k in range(nsamples):
         d = d.reshape(1,1,3) # create 3D array to be added in test data
         ytest = np.vstack((ytest, d)) # add [y1, y2, y3] at (n+1) to input test for next slope prediction
     
-#    plt.figure()    
-#    plt.plot(t, ytest_ml[:,0], 'c-', label=r'$y_1 ML$') 
-#    plt.plot(t, ytest_ml[:,1], 'm-', label=r'$y_2 ML$') 
-#    plt.plot(t, ytest_ml[:,2], 'y-', label=r'$y_3 ML$') 
-#    
-#    plt.plot(t, ytode[:,0], 'r-', label=r'$y_1$') 
-#    plt.plot(t, ytode[:,1], 'g-', label=r'$y_2$') 
-#    plt.plot(t, ytode[:,2], 'b-', label=r'$y_3$') 
-#    
-#    plt.ylabel('response ML')
-#    plt.xlabel('time ML')
-#    plt.legend(loc='best')
-#    plt.show()
+    plt.figure()    
+    plt.plot(t, ytest_ml[:,0], 'c-', label=r'$y_1 ML$') 
+    plt.plot(t, ytest_ml[:,1], 'm-', label=r'$y_2 ML$') 
+    plt.plot(t, ytest_ml[:,2], 'y-', label=r'$y_3 ML$') 
+    
+    plt.plot(t, ytode[:,0], 'r-', label=r'$y_1$') 
+    plt.plot(t, ytode[:,1], 'g-', label=r'$y_2$') 
+    plt.plot(t, ytode[:,2], 'b-', label=r'$y_3$') 
+    
+    plt.ylabel('response ML')
+    plt.xlabel('time ML')
+    plt.legend(loc='best')
+    plt.savefig('ode_seq_oneleg_x=-0.25.png', dpi = 1000)
+    plt.show()
     
     # calculation of mean square error
     residual = np.zeros((nsamples,3))
@@ -197,12 +195,12 @@ y20hist = y20hist.reshape(nsamples,1)
 errorhist =  np.concatenate((y20hist,rmshist), axis = 1)
 errorhist = errorhist[errorhist[:,0].argsort()]
 
-plt.figure()    
-plt.plot(errorhist[:,0], errorhist[:,1], 'r-', label='Y1 Error') 
-plt.plot(errorhist[:,0], errorhist[:,2], 'g-', label='Y2 Error') 
-plt.plot(errorhist[:,0], errorhist[:,3], 'b-', label='Y3 Error') 
-
-plt.ylabel('Mean square error')
-plt.xlabel('x')
-plt.legend(loc='best')
-plt.show()
+#plt.figure()    
+#plt.plot(errorhist[:,0], errorhist[:,1], 'r-', label='Y1 Error') 
+#plt.plot(errorhist[:,0], errorhist[:,2], 'g-', label='Y2 Error') 
+#plt.plot(errorhist[:,0], errorhist[:,3], 'b-', label='Y3 Error') 
+#
+#plt.ylabel('Mean square error')
+#plt.xlabel('x')
+#plt.legend(loc='best')
+#plt.show()
