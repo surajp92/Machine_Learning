@@ -5,6 +5,7 @@ Created on Sun Mar 17 15:19:23 2019
 
 @author: user1
 """
+
 # import packages
 import numpy as np
 from numpy.random import seed
@@ -12,9 +13,13 @@ seed(1)
 from tensorflow import set_random_seed
 set_random_seed(2)
 
-from keras.models import Sequential
-from keras.layers import Dense
-from keras.layers import LSTM
+import math
+from keras.models import Sequential, Model
+from keras.layers import Dense, dot, Input
+import keras.backend as K
+from keras.callbacks import ModelCheckpoint
+from keras.models import load_model
+from keras import optimizers
 from sklearn.preprocessing import MinMaxScaler # needed if we want to normalize input and output data. Not normalized in this code
 
 from scipy.integrate import odeint
@@ -28,6 +33,12 @@ def odemodel(y,t):
     dy2dt = -y[0]**2 + y[1]**2
     dydt  = [dy0dt, dy1dt, dy2dt]
     return dydt
+
+def coeff_determination(y_true, y_pred):
+    SS_res =  K.sum(K.square( y_true-y_pred ))
+    SS_tot = K.sum(K.square( y_true - K.mean(y_true) ) )
+    return ( 1 - SS_res/(SS_tot + K.epsilon()) )
+
 
 # time points
 t_init  = 0.0  # Initial time
@@ -55,43 +66,40 @@ plt.legend(loc='best')
 plt.show()
 
 # calculate slope
-yout = [y[i+2] for i in range(len(y)-2)]
+yout = [(y[i+1]-y[i])/(dt) for i in range(1,len(y)-1)]
 # yout.insert(len(y)-1, y[len(y)-1]) # solution at y(tn) = y(t_n-1)
 yout = np.array(yout)
 
 # training data always contatins ode data with initial condition [1,0.1,0] as calculated above
-# temporaty traininig data
-xt = y
+xtrain = [[y[i-2,0], y[i-2,1], y[i-2,2], y[i-1,0], y[i-1,1], y[i-1,2]] for i in range(2,y.shape[0])]
+xtrain = np.array(xtrain)
 # for LSTM the input has to be 3-dimensional array with the dimension [samples, time. features]
 # https://machinelearningmastery.com/reshape-input-data-long-short-term-memory-networks-keras/?unapproved=474658&moderation-hash=87553a7d66026ce022753be31629fd1c#comment-474658
 # output shape is often [samples, features]
-# xtrain = xtrain.reshape(nt_steps-1,1,3)
 ytrain = yout
 
-# data for two leg [y(n-1), y(n)]
-xtrain = [[xt[i-2,0], xt[i-2,1], xt[i-2,2], xt[i-1,0], xt[i-1,1], xt[i-1,2]] for i in range(2,xt.shape[0])]
-# xtrain.insert(0, [0, 0, 0, xt[0,0], xt[0,1], xt[0,2]])
-xtrain = np.array(xtrain)    
+frandom = np.zeros((nsamples,3))
 
 # additional data for training with random initial condition
 for i in range(nsamples):
     # initial condition
     y2s = 0.1*uniform(-1,1)
+    frandom[i,0] = y2s
     y0 = [1.0, y2s, 0.0]
     # solve ode
     y = odeint(odemodel, y0, t)
+    frandom[i,1] = y[nt_steps-1,1]
+    frandom[i,2] = y[nt_steps-1,2]
     # calculate slope
-    yout = [y[j+2] for j in range(len(y)-2)]
-    # yout.insert(len(y)-1, y[len(y)-1]) # solution at y(tn) = y(t_n-1)
+    yout = [(y[j+1]-y[j])/(dt) for j in range(1,len(y)-1)]
     yout = np.array(yout)
-    # reshape input and add in the previous input train data
-    # y = y.reshape(nt_steps,1,3)
     xtemp = [[y[i-2,0], y[i-2,1], y[i-2,2], y[i-1,0], y[i-1,1], y[i-1,2]] for i in range(2,y.shape[0])]
-    # xtemp.insert(0, [0, 0, 0, y[0,0], y[0,1], y[0,2]])
     xtemp = np.array(xtemp)
-    # add xt = [y(n-1), y(n)] to x_train    
     xtrain = np.vstack((xtrain, xtemp))
     ytrain = np.vstack((ytrain, yout))
+
+# sort frandom for further plotting
+frandom = frandom[frandom[:,0].argsort()]
 
 # randomly sample data
 indices = np.random.randint(0,xtrain.shape[0],rsamples)
@@ -99,35 +107,48 @@ indices = np.random.randint(0,xtrain.shape[0],rsamples)
 xtrain = xtrain[indices]
 ytrain = ytrain[indices]
 
-xtrain = xtrain.reshape(rsamples,1,6)
+#xtrain = xtrain.reshape(rsamples,1,3)
 
 # create the LSTM model
 model = Sequential()
-#model.add(LSTM(3, input_shape=(1, 3), return_sequences=True, activation='tanh'))
-#model.add(LSTM(120, input_shape=(1, 6), return_sequences=True, activation='tanh'))
-#model.add(LSTM(120, input_shape=(1, 6), return_sequences=True, activation='tanh'))
-model.add(LSTM(240, input_shape=(1, 6), activation='tanh'))
-model.add(Dense(3))
 
-# compile the model
-model.compile(loss='mse', optimizer='adam', metrics=['accuracy'])
+# Layers start
+input_layer = Input(shape=(6,))
 
-# run the model
-history = model.fit(xtrain, ytrain, nb_epoch=800, batch_size=100, validation_split=0.3)
+# Hidden layers
+x = Dense(100, activation='relu', use_bias=True)(input_layer)
+x = Dense(100, activation='relu', use_bias=True)(x)
+x = Dense(100, activation='relu', use_bias=True)(x)
+x = Dense(100, activation='relu', use_bias=True)(x)
+x = Dense(100, activation='relu', use_bias=True)(x)
+
+op_val = Dense(3, activation='linear', use_bias=True)(x)
+custom_model = Model(inputs=input_layer, outputs=op_val)
+filepath = "best_model.hd5"
+checkpoint = ModelCheckpoint(filepath, monitor='val_loss', verbose=1, save_best_only=True, mode='min')
+callbacks_list = [checkpoint]
+
+custom_model.compile(optimizer='adam', loss='mean_squared_error', metrics=[coeff_determination])
+history_callback = custom_model.fit(xtrain, ytrain, epochs=20, batch_size=200, verbose=1, validation_split= 0.3,
+                                    callbacks=callbacks_list)
 
 # training and validation loss. Plot loss
-loss = history.history['loss']
-val_loss = history.history['val_loss']
+loss_history = history_callback.history["loss"]
+val_loss_history = history_callback.history["val_loss"]
+# evaluate the model
+scores = custom_model.evaluate(xtrain, ytrain)
+print("\n%s: %.2f%%" % (custom_model.metrics_names[1], scores[1]*100))
 
-epochs = range(1, len(loss) + 1)
+epochs = range(1, len(loss_history) + 1)
 
 plt.figure()
-plt.plot(epochs, loss, 'b', label='Training loss')
-plt.plot(epochs, val_loss, 'r', label='Validationloss')
+plt.plot(epochs, loss_history, 'b', label='Training loss')
+plt.plot(epochs, val_loss_history, 'r', label='Validation loss')
 plt.title('Training and validation loss')
 plt.legend()
 plt.show()
 
+nsamples = 1
 rmshist = np.zeros((nsamples,3))
 y20hist = np.zeros(nsamples)
 for k in range(nsamples):
@@ -143,7 +164,7 @@ for k in range(nsamples):
     # create input at t= 0 for the model testing
     ytest = [ytode[0], ytode[1]]
     ytest = np.array(ytest)
-    ytest = ytest.reshape(1,1,6)
+    ytest = ytest.reshape(1,6)
     
     # create an array to store ml predicted y
     ytest_ml = np.zeros((nt_steps,3))
@@ -152,32 +173,31 @@ for k in range(nsamples):
     ytest_ml[1] = ytode[1]
     
     for i in range(2,nt_steps):
-        slope_ml = model.predict(ytest) # slope from LSTM/ ML model
-        a = slope_ml[i-2,0] # y1 at next time step
-        b = slope_ml[i-2,1] # y2 at next time step
-        c = slope_ml[i-2,2] # y3 at next time step
+        slope_ml = custom_model.predict(ytest) # slope from LSTM/ ML model
+        a = ytest_ml[i-1,0] + 1.0*dt*slope_ml[i-2,0] # y1 at next time step
+        b = ytest_ml[i-1,1] + 1.0*dt*slope_ml[i-2,1] # y2 at next time step
+        c = ytest_ml[i-1,2] + 1.0*dt*slope_ml[i-2,2] # y3 at next time step
         d = [a,b,c] # [y1, y2, y3] at (n+1)th step
         d = np.array(d)
         ytest_ml[i] = d
-        ee = [ytest[i-2,0,3], ytest[i-2,0,4], ytest[i-2,0,5], a, b, c]
+        ee = [ytest[i-2,3], ytest[i-2,4], ytest[i-2,5], a, b, c]
         ee = np.array(ee)
-        ee = ee.reshape(1,1,6) # create 3D array to be added in test data
+        ee = ee.reshape(1,6)
         ytest = np.vstack((ytest, ee)) # add [y1, y2, y3] at (n+1) to input test for next slope prediction
     
+    plt.figure()    
+    plt.plot(t, ytest_ml[:,0], 'c-', label=r'$y_1 ML$') 
+    plt.plot(t, ytest_ml[:,1], 'm-', label=r'$y_2 ML$') 
+    plt.plot(t, ytest_ml[:,2], 'y-', label=r'$y_3 ML$') 
     
-#    plt.figure()    
-#    plt.plot(t, ytest_ml[:,0], 'c-', label=r'$y_1 ML$') 
-#    plt.plot(t, ytest_ml[:,1], 'm-', label=r'$y_2 ML$') 
-#    plt.plot(t, ytest_ml[:,2], 'y-', label=r'$y_3 ML$') 
-#    
-#    plt.plot(t, ytode[:,0], 'r-', label=r'$y_1$') 
-#    plt.plot(t, ytode[:,1], 'g-', label=r'$y_2$') 
-#    plt.plot(t, ytode[:,2], 'b-', label=r'$y_3$') 
-#    
-#    plt.ylabel('response ML')
-#    plt.xlabel('time ML')
-#    plt.legend(loc='best')
-#    plt.show()
+    plt.plot(t, ytode[:,0], 'r-', label=r'$y_1$') 
+    plt.plot(t, ytode[:,1], 'g-', label=r'$y_2$') 
+    plt.plot(t, ytode[:,2], 'b-', label=r'$y_3$') 
+    
+    plt.ylabel('response ML')
+    plt.xlabel('time ML')
+    plt.legend(loc='best')
+    plt.show()
     
     # calculation of mean square error
     residual = np.zeros((nsamples,3))
@@ -189,17 +209,17 @@ for k in range(nsamples):
     rms = rms/nsamples
     
     rmshist[k] = rms.reshape(1,3)
-    
+
 y20hist = y20hist.reshape(nsamples,1)
 errorhist =  np.concatenate((y20hist,rmshist), axis = 1)
 errorhist = errorhist[errorhist[:,0].argsort()]
 
-plt.figure()    
-plt.plot(errorhist[:,0], errorhist[:,1], 'r-', label='Y1 Error') 
-plt.plot(errorhist[:,0], errorhist[:,2], 'g-', label='Y2 Error') 
-plt.plot(errorhist[:,0], errorhist[:,3], 'b-', label='Y3 Error') 
-
-plt.ylabel('Mean square error')
-plt.xlabel('x')
-plt.legend(loc='best')
-plt.show()
+#plt.figure()    
+#plt.plot(errorhist[:,0], errorhist[:,1], 'r-', label='Y1 Error') 
+#plt.plot(errorhist[:,0], errorhist[:,2], 'g-', label='Y2 Error') 
+#plt.plot(errorhist[:,0], errorhist[:,3], 'b-', label='Y3 Error') 
+#
+#plt.ylabel('Mean square error')
+#plt.xlabel('x')
+#plt.legend(loc='best')
+#plt.show()
