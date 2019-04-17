@@ -21,6 +21,9 @@ from sklearn.preprocessing import MinMaxScaler # needed if we want to normalize 
 from scipy.integrate import odeint
 import matplotlib.pyplot as plt
 from random import uniform
+from create_data_v2 import * 
+from model_prediction_v2 import *
+from export_data_v2 import *
 
 # function that returns dy/dt
 def odemodel(y,t):
@@ -63,10 +66,6 @@ yout = np.array(yout)
 
 # training data always contatins ode data with initial condition [1,0.1,0] as calculated above
 xtrain = y[0:len(y)-1]
-# for LSTM the input has to be 3-dimensional array with the dimension [samples, time. features]
-# https://machinelearningmastery.com/reshape-input-data-long-short-term-memory-networks-keras/?unapproved=474658&moderation-hash=87553a7d66026ce022753be31629fd1c#comment-474658
-# output shape is often [samples, features]
-# xtrain = xtrain.reshape(nt_steps-1,1,3)
 ytrain = yout
 
 frandom = np.zeros((nsamples,3))
@@ -130,77 +129,36 @@ plt.title('Training and validation loss')
 plt.legend()
 plt.show()
 
-nsamples = 1
-rmshist = np.zeros((nsamples,3))
-y20hist = np.zeros(nsamples)
-for k in range(nsamples):
-    # initial condition
-    #y2s = 0.1*uniform(-1,1)
-    y2s = -0.1*0.25
-    y20hist[k] = y2s
-    # initial condition
-    y0test = [1, y2s, 0]
-    
-    # solve ODE
-    ytode = odeint(odemodel,y0test,t)
-    
-    # create input at t= 0 for the model testing
-    ytest = [ytode[0]]
-    ytest = np.array(ytest)
-    ytest = ytest.reshape(1,1,3)
+# initial condition
+#y2s = 0.1*uniform(-1,1)
+y2s = -0.1*0.25
+y20hist[k] = y2s
+# initial condition
+y0test = [1, y2s, 0]
 
-    # create an array to store ml predicted y
-    ytest_ml = np.zeros((nt_steps,3))
-    # ytest_ml = ode solution for first four time steps
-    ytest_ml[0] = ytode[0]
+# solve ODE
+ytode = odeint(odemodel,y0test,t)
 
-    for i in range(1,nt_steps):
-        slope_ml = model.predict(ytest) # slope from LSTM/ ML model
-        a = slope_ml[i-1,0] # y1 at next time step
-        b = slope_ml[i-1,1] # y2 at next time step
-        c = slope_ml[i-1,2] # y3 at next time step
-        d = [a,b,c] # [y1, y2, y3] at (n+1)th step
-        d = np.array(d)
-        ytest_ml[i] = d
-        d = d.reshape(1,1,3) # create 3D array to be added in test data
-        ytest = np.vstack((ytest, d)) # add [y1, y2, y3] at (n+1) to input test for next slope prediction
-    
-    plt.figure()    
-    plt.plot(t, ytest_ml[:,0], 'c-', label=r'$y_1 ML$') 
-    plt.plot(t, ytest_ml[:,1], 'm-', label=r'$y_2 ML$') 
-    plt.plot(t, ytest_ml[:,2], 'y-', label=r'$y_3 ML$') 
-    
-    plt.plot(t, ytode[:,0], 'r-', label=r'$y_1$') 
-    plt.plot(t, ytode[:,1], 'g-', label=r'$y_2$') 
-    plt.plot(t, ytode[:,2], 'b-', label=r'$y_3$') 
-    
-    plt.ylabel('response ML')
-    plt.xlabel('time ML')
-    plt.legend(loc='best')
-    plt.savefig('ode_seq_oneleg_x=-0.25.png', dpi = 1000)
-    plt.show()
-    
-    # calculation of mean square error
-    residual = np.zeros((nsamples,3))
-    residual = ytest_ml - ytode
-    residual2 = residual*residual
-    rms = np.zeros((1,3))
-    rms = sum(residual2)
-    rms = np.sqrt(rms)
-    rms = rms/nsamples
-    
-    rmshist[k] = rms.reshape(1,3)
+# create input at t= 0 for the model testing
+ytest = [ytode[0]]
+ytest = np.array(ytest)
+ytest = ytest.reshape(1,1,3)
 
-y20hist = y20hist.reshape(nsamples,1)
-errorhist =  np.concatenate((y20hist,rmshist), axis = 1)
-errorhist = errorhist[errorhist[:,0].argsort()]
+# create an array to store ml predicted y
+ytest_ml = np.zeros((nt_steps,3))
+# ytest_ml = ode solution for first four time steps
+ytest_ml[0] = ytode[0]
 
-#plt.figure()    
-#plt.plot(errorhist[:,0], errorhist[:,1], 'r-', label='Y1 Error') 
-#plt.plot(errorhist[:,0], errorhist[:,2], 'g-', label='Y2 Error') 
-#plt.plot(errorhist[:,0], errorhist[:,3], 'b-', label='Y3 Error') 
-#
-#plt.ylabel('Mean square error')
-#plt.xlabel('x')
-#plt.legend(loc='best')
-#plt.show()
+for i in range(1,nt_steps):
+    slope_ml = model.predict(ytest) # slope from LSTM/ ML model
+    a = slope_ml[i-1,0] # y1 at next time step
+    b = slope_ml[i-1,1] # y2 at next time step
+    c = slope_ml[i-1,2] # y3 at next time step
+    d = [a,b,c] # [y1, y2, y3] at (n+1)th step
+    d = np.array(d)
+    ytest_ml[i] = d
+    d = d.reshape(1,1,3) # create 3D array to be added in test data
+    ytest = np.vstack((ytest, d)) # add [y1, y2, y3] at (n+1) to input test for next slope prediction
+
+
+
